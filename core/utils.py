@@ -550,33 +550,6 @@ def make_full_analyses_anomalies(data: pd.DataFrame,
     report.print_result()
 
 
-def process_city_name(city_name: str) -> str:
-    """
-    This function processes city names and returns the processed name.
-    """
-    if city_name.startswith("г."):
-        return city_name[2:]
-    elif city_name.endswith(" г"):
-        return city_name[:-2]
-    else:
-        return city_name
-
-
-def clean_city(city):
-    city = re.sub(r'[^\w\s]', '', city)
-    city = re.sub(r'\d+', '', city)
-    city = city.strip()
-    city = city.lower()
-    return city
-
-
-def exclude_date(df: pd.DataFrame) -> list[str]:
-    return list(set(df.columns) - set([
-        'Дата',
-        'дата',
-        'дата_первого_дня']))
-
-
 def binary_search(item):
     my_list = [f'{i}_{j}'
                for i, j in zip(list(range(0, 91, 10)),

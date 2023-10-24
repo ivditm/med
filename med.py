@@ -7,6 +7,8 @@ import os
 import seaborn as sns
 import plotly.express as px
 import pandas as pd
+import numpy as np
+import plotly.graph_objs as go
 
 
 load_dotenv()
@@ -60,10 +62,11 @@ data['service_amount'] = data['service_amount'].apply(lambda x:
                                                             .strip())))
 data['service_number'] = data['service_number'].astype(int)
 data['age_for_service_date'] = data['age_for_service_date'].astype(int)
+data['insured'] = data['insured'].astype(int)
 data['sex_id'] = data['sex_id'].astype(int)
 data['year'] = data['service_date'].dt.year.astype(str)
 data['sex_id'] = data['sex_id'].map({1: 'муж', 2: 'жен'})
-data['price'] = data['service_amount']/data['service_number']
+data['price'] = data['service_amount'] / data['service_number']
 data['age_poligon'] = data['age_for_service_date'].apply(func=binary_search)
 data['service_date'] = data['service_date'].dt.date
 data['service_date'] = data['service_date'].map(str)
@@ -81,7 +84,7 @@ year = st.radio('Выберите год', [2021, 2022])
 year = str(year)
 data_indicators = data.query('year == @year')
 revenue = data_indicators['service_amount'].sum()
-avg_check = round(revenue/len(data_indicators['insured'].unique()))
+avg_check = round(revenue / len(data_indicators['insured'].unique()))
 cnt_clients = len(data_indicators['insured'].unique())
 cnt_services = len(data_indicators['service_name'].unique())
 col1, col2 = st.columns(2)
@@ -93,8 +96,77 @@ with col2:
     st.markdown(
         f'#### Кол-во уникальных оказываемых услуг: {cnt_services}')
 
+effective = (data_indicators
+             .groupby('insured', as_index=False)
+             .agg({'service_name': 'count'})[['insured', 'service_name']]
+             .rename(columns={'service_name': 'effectife'}))
+effective = (effective
+             .groupby(by='effectife',
+                      as_index=False)
+             .agg({'insured': 'count'})
+             .rename(columns={'insured': 'num_clients'}))
+q25, q75 = np.quantile(effective['effectife'], [0.25, 0.75])
+effective['poligon_effectfes'] = (
+    effective['effectife']
+    .apply(
+            lambda x:
+            f'{effective["effectife"].min()}-{q25} визитов'
+            if x < q25
+            else (
+             f'{q25}-{q75} визитов'
+             if q25 <= x <= q75
+             else
+             f'{q75}-{effective["effectife"].max()} визитов'
+                                  )
+                                  ))
+effective = (effective
+             .groupby(by='poligon_effectfes', as_index=False)
+             .agg({'num_clients': 'sum'}))
+q25, q75 = np.quantile(data_indicators['price'], [0.25, 0.75])
+data_indicators['poligon_price'] = (data_indicators['price']
+                                    .apply(
+    lambda x:
+    f'{data_indicators["price"].min()}-{q25} руб'
+    if x < q25
+    else (
+        f'{q25}-{q75} руб'
+        if q25 <= x <= q75
+        else
+        f'{q75}-{data_indicators["price"].max()} руб'
+    )
+))
+structure_price = (data_indicators
+                   .groupby(by='poligon_price', as_index=False)
+                   .agg({'service_name': 'count'})
+                   .rename(columns={'service_name': 'effectives'}))
+
+fig = go.Figure(
+    data=[
+        go.Pie(labels=effective['poligon_effectfes'],
+               values=effective['num_clients'],
+               hole=.3)
+    ]
+)
+fig.update_layout(
+    title_text="Интесивность лечения"
+)
+st.plotly_chart(fig)
+
+fig = go.Figure(
+    data=[
+        go.Pie(labels=structure_price['poligon_price'],
+               values=structure_price['effectives'],
+               hole=.3)
+    ]
+)
+fig.update_layout(
+    title_text="Структура услуг по стоимости"
+)
+st.plotly_chart(fig)
+
 with st.expander('Посмотреть данные'):
     st.dataframe(data)
+
 
 st.header('Общий анализ')
 column = st.selectbox('Выберите колонку для анализа', [
@@ -120,6 +192,7 @@ fig = px.scatter_3d(
 )
 st.plotly_chart(fig)
 
+
 factor = st.selectbox(
     'Выберете фактор',
     ['sex_id',
@@ -134,6 +207,7 @@ column = st.selectbox(
 sns.boxplot(data=data, x=column, y="year", hue=factor)
 st.pyplot()
 
+
 st.header('Анализ гипотез')
 factor = st.selectbox(
     'Выбирете фактор',
@@ -141,7 +215,7 @@ factor = st.selectbox(
         "service_amount",
         "service_number",
         "age_for_service_date"
-     ])
+    ])
 alpha = st.slider('Choose alpha level',
                   min_value=0.01,
                   max_value=1.0,
@@ -171,11 +245,11 @@ reg = Regressor(
         "service_amount"
     ]
 )
-
 if graphs == 'table':
     st.write(reg.analysis())
 elif graphs == 'plot':
     reg.get_plot()
+
 
 st.header('Выводы:')
 st.markdown("""В ходе проведенного исследования были
